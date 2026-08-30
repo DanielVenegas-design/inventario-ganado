@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Rancho · Inventario de Ganado</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bitter:wght@500;600;700;800&family=Source+Sans+3:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+
+<!-- ============================================================
+     FIREBASE — SDK (no lo toques, solo configura más abajo)
+============================================================ -->
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.13.0/firebase-firestore-compat.js"></script>
+
+<style>
+  :root{
+    --pine-950:#1b2417;
+    --pine-900:#233020;
+    --pine-800:#2e402a;
+    --leather-700:#6b4226;
+    --leather-600:#83552f;
+    --hide-100:#f2ede1;
+    --hide-200:#e8dfc9;
+    --hide-300:#d9cba6;
+    --tag-yellow:#e3ab1f;
+    --tag-yellow-dark:#b9860f;
+    --ink-900:#22231d;
+    --ink-600:#5a5b4f;
+    --danger:#a63d33;
+    --danger-dark:#832f27;
+    --ok:#3f7a4f;
+    --radius:10px;
+    --shadow-sm: 0 1px 2px rgba(27,36,23,0.08);
+    --shadow-md: 0 6px 20px rgba(27,36,23,0.14);
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      radial-gradient(1200px 500px at 10% -10%, rgba(227,171,31,0.08), transparent 60%),
+      var(--hide-100);
+    color:var(--ink-900);
+    font-family:'Source Sans 3', system-ui, sans-serif;
+    min-height:100vh;
+    padding-bottom:60px;
+  }
+  h1,h2,h3,.display{ font-family:'Bitter', Georgia, serif; letter-spacing:-0.01em; }
+  .mono{ font-family:'JetBrains Mono', monospace; }
+
+  /* ---- Top bar ---- */
+  header.top{
+    background: linear-gradient(180deg, var(--pine-900), var(--pine-950));
+    color:var(--hide-100);
+    padding:22px 24px 26px;
+    position:relative; overflow:hidden;
+    border-bottom:4px solid var(--leather-700);
+  }
+  header.top::before{
+    content:""; position:absolute; inset:0;
+    background-image: repeating-linear-gradient(135deg, rgba(255,255,255,0.025) 0 2px, transparent 2px 18px);
+    pointer-events:none;
+  }
+  .top-inner{
+    max-width:1100px; margin:0 auto; position:relative; z-index:1;
+    display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap;
+  }
+  .brand{ display:flex; align-items:center; gap:14px; }
+  .brand-mark{
+    width:46px; height:46px; border-radius:50%;
+    background: radial-gradient(circle at 35% 30%, var(--leather-600), var(--leather-700) 70%);
+    display:flex; align-items:center; justify-content:center;
+    box-shadow: inset 0 0 0 2px rgba(255,255,255,0.15), var(--shadow-md);
+    font-size:22px;
+  }
+  header.top h1{ margin:0; font-size:1.5rem; font-weight:800; color:#fff; }
+  header.top p{ margin:2px 0 0; font-size:0.85rem; color:#c9d1c0; }
+
+  .stats{ display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  .stat-chip{
+    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.14);
+    border-radius:var(--radius); padding:8px 14px; min-width:96px; text-align:center;
+  }
+  .stat-chip .n{ font-family:'Bitter',serif; font-size:1.35rem; font-weight:700; color:var(--tag-yellow); line-height:1.1; }
+  .stat-chip .l{ font-size:0.68rem; text-transform:uppercase; letter-spacing:0.06em; color:#c9d1c0; }
+  .sync-pill{
+    display:flex; align-items:center; gap:6px; font-size:0.72rem; color:#c9d1c0;
+    background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.14);
+    padding:6px 10px; border-radius:999px;
+  }
+  .sync-dot{ width:7px; height:7px; border-radius:50%; background:#6fbf73; box-shadow:0 0 0 3px rgba(111,191,115,0.2); }
+  .sync-dot.offline{ background:#c96a5f; box-shadow:0 0 0 3px rgba(201,106,95,0.2); }
+  .user-chip{
+    display:flex; align-items:center; gap:8px; font-size:0.78rem; color:#e8ecdf;
+    background:rgba(255,255,255,0.08); padding:6px 12px; border-radius:999px; border:1px solid rgba(255,255,255,0.14);
+  }
+  .user-chip button{
+    background:none; border:none; color:var(--tag-yellow); font-size:0.75rem; font-weight:700; cursor:pointer; padding:0;
+  }
+
+  main{ max-width:1100px; margin:0 auto; padding:22px 24px 0; }
+
+  .toolbar{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:18px; }
+  .search-wrap{ position:relative; flex:1; min-width:220px; }
+  .search-wrap input{
+    width:100%; padding:11px 14px 11px 38px; border-radius:var(--radius); border:1px solid var(--hide-300);
+    background:#fff; font-size:0.95rem; color:var(--ink-900);
+  }
+  .search-wrap input:focus{ outline:2px solid var(--tag-yellow-dark); outline-offset:1px; }
+  .search-wrap svg{ position:absolute; left:12px; top:50%; transform:translateY(-50%); opacity:0.5; }
+
+  select#filterUbicacion{
+    padding:11px 14px; border-radius:var(--radius); border:1px solid var(--hide-300);
+    background:#fff; font-size:0.9rem; color:var(--ink-900); max-width:220px;
+  }
+
+  .btn{
+    border:none; cursor:pointer; font-weight:600; border-radius:var(--radius);
+    padding:11px 18px; font-size:0.92rem; font-family:inherit;
+    display:inline-flex; align-items:center; gap:8px;
+    transition:transform 0.08s ease, box-shadow 0.15s ease, background 0.15s ease;
+  }
+  .btn:active{ transform:translateY(1px); }
+  .btn-primary{ background:var(--pine-800); color:#fff; box-shadow:var(--shadow-sm); }
+  .btn-primary:hover{ background:var(--pine-900); }
+  .btn-ghost{ background:#fff; color:var(--ink-900); border:1px solid var(--hide-300); }
+  .btn-ghost:hover{ background:var(--hide-200); }
+  .btn-danger{ background:transparent; color:var(--danger); border:1px solid rgba(166,61,51,0.35); }
+  .btn-danger:hover{ background:rgba(166,61,51,0.08); }
+  .btn-sm{ padding:6px 10px; font-size:0.78rem; border-radius:8px; }
+  .btn:disabled{ opacity:0.55; cursor:not-allowed; }
+  .btn-block{ width:100%; justify-content:center; }
+
+  .backup-row{ display:flex; gap:8px; flex-wrap:wrap; }
+
+  .empty{
+    background:#fff; border:1px dashed var(--hide-300); border-radius:14px;
+    padding:48px 24px; text-align:center; color:var(--ink-600);
+  }
+  .empty .tag-illustration{ margin-bottom:14px; }
+  .empty h3{ margin:0 0 6px; color:var(--ink-900); }
+
+  .table-card{ background:#fff; border-radius:14px; overflow:hidden; box-shadow:var(--shadow-sm); border:1px solid var(--hide-300); }
+  table{ width:100%; border-collapse:collapse; }
+  thead th{
+    text-align:left; font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em;
+    color:var(--ink-600); background:var(--hide-200); padding:12px 16px; font-weight:700;
+    border-bottom:1px solid var(--hide-300);
+  }
+  tbody td{ padding:12px 16px; border-bottom:1px solid var(--hide-200); font-size:0.93rem; vertical-align:middle; }
+  tbody tr:last-child td{ border-bottom:none; }
+  tbody tr:hover{ background:rgba(227,171,31,0.06); }
+
+  .ear-tag{
+    display:inline-flex; align-items:center; gap:6px;
+    background:linear-gradient(180deg, var(--tag-yellow), var(--tag-yellow-dark));
+    color:#3a2a05; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:0.85rem;
+    padding:5px 10px 5px 12px; border-radius:6px 14px 14px 6px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.4) inset, var(--shadow-sm);
+    position:relative; letter-spacing:0.02em;
+  }
+  .ear-tag::before{
+    content:""; position:absolute; left:-4px; top:50%; transform:translateY(-50%);
+    width:8px; height:8px; border-radius:50%; background:var(--hide-100);
+    box-shadow: inset 0 0 0 1.5px var(--tag-yellow-dark);
+  }
+
+  .loc-badge{
+    display:inline-flex; align-items:center; gap:6px;
+    background:var(--pine-800); color:#e8ecdf; font-size:0.78rem; font-weight:600;
+    padding:4px 10px; border-radius:999px;
+  }
+  .muted{ color:var(--ink-600); font-size:0.85rem; }
+  .row-actions{ display:flex; gap:6px; justify-content:flex-end; }
+
+  .sexo-pill{ font-size:0.72rem; padding:2px 8px; border-radius:999px; font-weight:700; }
+  .sexo-H{ background:#f2dcdc; color:#8a3b34; }
+  .sexo-M{ background:#dbe6d6; color:#3f6a48; }
+
+  .cards{ display:none; flex-direction:column; gap:10px; }
+  .cattle-card{ background:#fff; border:1px solid var(--hide-300); border-radius:14px; padding:14px; box-shadow:var(--shadow-sm); }
+  .cattle-card .top-row{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; gap:8px; }
+  .cattle-card .meta{ font-size:0.85rem; color:var(--ink-600); margin:3px 0; }
+  .cattle-card .actions{ display:flex; gap:8px; margin-top:12px; }
+
+  @media (max-width: 760px){
+    table{ display:none; }
+    .cards{ display:flex; }
+    .stats{ width:100%; justify-content:space-between; }
+    .stat-chip{ flex:1; min-width:0; }
+  }
+
+  .overlay{
+    position:fixed; inset:0; background:rgba(27,36,23,0.55); backdrop-filter:blur(2px);
+    display:none; align-items:center; justify-content:center; padding:20px; z-index:50;
+  }
+  .overlay.open{ display:flex; }
+  .modal{
+    background:#fdfbf6; border-radius:16px; width:100%; max-width:480px; padding:26px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.3); max-height:90vh; overflow-y:auto;
+    border-top:4px solid var(--tag-yellow-dark);
+  }
+  .modal h2{ margin:0 0 4px; font-size:1.25rem; }
+  .modal .sub{ color:var(--ink-600); font-size:0.85rem; margin-bottom:18px; }
+  .field{ margin-bottom:14px; }
+  .field label{ display:block; font-size:0.8rem; font-weight:600; margin-bottom:5px; color:var(--ink-900); }
+  .field .req{ color:var(--danger); }
+  .field input, .field select, .field textarea{
+    width:100%; padding:10px 12px; border-radius:8px; border:1px solid var(--hide-300);
+    font-size:0.94rem; font-family:inherit; background:#fff; color:var(--ink-900);
+  }
+  .field input:focus, .field select:focus, .field textarea:focus{ outline:2px solid var(--tag-yellow-dark); outline-offset:1px; }
+  .field-row{ display:flex; gap:10px; }
+  .field-row .field{ flex:1; }
+  .field .error-msg{ color:var(--danger); font-size:0.78rem; margin-top:4px; display:none; }
+  .field.has-error input, .field.has-error select{ border-color:var(--danger); }
+  .field.has-error .error-msg{ display:block; }
+  .modal-actions{ display:flex; justify-content:flex-end; gap:10px; margin-top:20px; }
+
+  .confirm-modal .modal{ max-width:400px; border-top-color:var(--danger); }
+  .confirm-modal p{ font-size:0.92rem; color:var(--ink-600); line-height:1.5; }
+  .confirm-modal strong{ color:var(--ink-900); }
+
+  #toast{
+    position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px);
+    background:var(--pine-950); color:#fff; padding:12px 20px; border-radius:10px;
+    font-size:0.88rem; box-shadow:var(--shadow-md); opacity:0; pointer-events:none;
+    transition:all 0.25s ease; z-index:100; display:flex; align-items:center; gap:8px;
+  }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+  #toast.err{ background:var(--danger-dark); }
+
+  footer.note{ max-width:1100px; margin:26px auto 0; padding:0 24px; color:var(--ink-600); font-size:0.78rem; text-align:center; }
+  #fileImport{ display:none; }
+
+  /* ---- Pantalla de acceso ---- */
+  #loginScreen{
+    min-height:100vh; display:flex; align-items:center; justify-content:center;
+    background: linear-gradient(180deg, var(--pine-950), var(--pine-900));
+    padding:20px;
+  }
+  .login-card{
+    background:#fdfbf6; border-radius:16px; width:100%; max-width:380px; padding:30px 28px;
+    box-shadow:0 20px 60px rgba(0,0,0,0.35); border-top:4px solid var(--tag-yellow-dark); text-align:center;
+  }
+  .login-card .brand-mark{ margin:0 auto 14px; }
+  .login-card h1{ font-size:1.3rem; margin:0 0 4px; }
+  .login-card p.sub{ color:var(--ink-600); font-size:0.85rem; margin:0 0 20px; }
+  .login-card .field{ text-align:left; }
+  #loginError{ color:var(--danger); font-size:0.82rem; margin:6px 0 14px; display:none; min-height:1em; }
+  .config-warning{
+    background:#fff3ea; border:1px solid #e8c39a; color:#7a4a1e; border-radius:10px;
+    padding:14px 16px; font-size:0.82rem; text-align:left; line-height:1.5; margin-bottom:18px;
+  }
+  .config-warning code{ background:rgba(0,0,0,0.06); padding:1px 5px; border-radius:4px; font-size:0.78em; }
+</style>
+</head>
+<body>
+
+<!-- ============================================================
+     PANTALLA DE ACCESO
+============================================================ -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="brand-mark" style="width:52px;height:52px;font-size:24px;">🐂</div>
+    <h1>Inventario de Ganado</h1>
+    <p class="sub">Inicia sesión para ver y editar el inventario del rancho.</p>
+
+    <div id="configWarning" class="config-warning" style="display:none;">
+      ⚠️ Todavía no configuraste Firebase. Abre este archivo, busca <code>firebaseConfig</code>
+      cerca del inicio del <code>&lt;script&gt;</code> y pega ahí los datos de tu proyecto.
+    </div>
+
+    <form id="loginForm">
+      <div class="field">
+        <label for="loginEmail">Correo</label>
+        <input type="email" id="loginEmail" autocomplete="username" required>
+      </div>
+      <div class="field">
+        <label for="loginPassword">Contraseña</label>
+        <input type="password" id="loginPassword" autocomplete="current-password" required>
+      </div>
+      <div id="loginError"></div>
+      <button type="submit" class="btn btn-primary btn-block" id="btnLogin">Entrar</button>
+    </form>
+    <p class="sub" style="margin-top:16px;">
+      Las cuentas se crean desde la consola de Firebase (Authentication → Users), no desde aquí.
+    </p>
+  </div>
+</div>
+
+<!-- ============================================================
+     APP PRINCIPAL (oculta hasta iniciar sesión)
+============================================================ -->
+<div id="appRoot" style="display:none;">
+
+<header class="top">
+  <div class="top-inner">
+    <div class="brand">
+      <div class="brand-mark">🐂</div>
+      <div>
+        <h1>Inventario de Ganado</h1>
+        <p>Control de aretes y ubicación por cabeza</p>
+      </div>
+    </div>
+    <div class="stats">
+      <div class="stat-chip"><div class="n" id="statTotal">0</div><div class="l">Cabezas</div></div>
+      <div class="stat-chip"><div class="n" id="statLugares">0</div><div class="l">Ubicaciones</div></div>
+      <div class="stat-chip"><div class="n" id="statHoy">0</div><div class="l">Nuevas (7 días)</div></div>
+      <div class="sync-pill"><span class="sync-dot" id="syncDot"></span><span id="syncLabel">Sincronizado</span></div>
+      <div class="user-chip"><span id="userEmailLabel">—</span><button id="btnLogout" type="button">Salir</button></div>
+    </div>
+  </div>
+</header>
+
+<main>
+  <div class="toolbar">
+    <div class="search-wrap">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+      <input type="text" id="searchInput" placeholder="Buscar por número de arete, raza o nota…">
+    </div>
+    <select id="filterUbicacion">
+      <option value="">Todas las ubicaciones</option>
+    </select>
+    <button class="btn btn-primary" id="btnAdd">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M12 5v14M5 12h14"/></svg>
+      Registrar cabeza
+    </button>
+  </div>
+
+  <div class="backup-row" style="margin-bottom:16px;">
+    <button class="btn btn-ghost btn-sm" id="btnExport">⬇ Exportar respaldo (JSON)</button>
+    <button class="btn btn-ghost btn-sm" id="btnImportTrigger">⬆ Importar respaldo</button>
+    <input type="file" id="fileImport" accept="application/json">
+    <button class="btn btn-ghost btn-sm" id="btnExportCsv">⬇ Exportar CSV</button>
+  </div>
+
+  <div id="emptyState" class="empty" style="display:none;">
+    <div class="tag-illustration"><span style="font-size:2.2rem;">🏷️</span></div>
+    <h3>Todavía no hay ganado registrado</h3>
+    <p>Agrega la primera cabeza con su número de arete y su ubicación para empezar el inventario.</p>
+    <button class="btn btn-primary" id="btnAddEmpty" style="margin-top:10px;">Registrar la primera cabeza</button>
+  </div>
+
+  <div id="noResults" class="empty" style="display:none;">
+    <h3>Sin resultados</h3>
+    <p>Ningún registro coincide con la búsqueda o el filtro actual.</p>
+  </div>
+
+  <div class="table-card" id="tableCard" style="display:none;">
+    <table>
+      <thead>
+        <tr><th>Arete</th><th>Ubicación</th><th>Sexo</th><th>Raza</th><th>Registrado</th><th>Notas</th><th></th></tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+
+  <div class="cards" id="cardsView"></div>
+</main>
+
+<footer class="note">
+  Los datos se guardan en la nube (Firebase) y se sincronizan en tiempo real entre todos los dispositivos conectados con una cuenta autorizada.
+  Aun así, exporta un respaldo de vez en cuando.
+</footer>
+
+</div><!-- /appRoot -->
+
+<!-- Modal: agregar/editar -->
+<div class="overlay" id="formOverlay">
+  <div class="modal">
+    <h2 id="modalTitle">Registrar cabeza</h2>
+    <p class="sub" id="modalSub">Captura el número de arete y su ubicación actual.</p>
+    <form id="cattleForm" novalidate>
+      <input type="hidden" id="editId">
+      <div class="field" id="fieldArete">
+        <label for="arete">Número de arete <span class="req">*</span></label>
+        <input type="text" id="arete" placeholder="Ej. MX-0234" autocomplete="off">
+        <div class="error-msg">Escribe un número de arete.</div>
+      </div>
+      <div class="field" id="fieldUbicacion">
+        <label for="ubicacion">Ubicación / potrero <span class="req">*</span></label>
+        <input type="text" id="ubicacion" list="ubicacionesList" placeholder="Ej. Potrero 3, Corral norte…" autocomplete="off">
+        <datalist id="ubicacionesList"></datalist>
+        <div class="error-msg">Indica dónde se encuentra.</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="sexo">Sexo</label>
+          <select id="sexo">
+            <option value="">—</option>
+            <option value="H">Hembra</option>
+            <option value="M">Macho</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="raza">Raza</label>
+          <input type="text" id="raza" placeholder="Ej. Brahman" autocomplete="off">
+        </div>
+      </div>
+      <div class="field">
+        <label for="notas">Notas</label>
+        <textarea id="notas" rows="2" placeholder="Observaciones, peso, estado de salud…"></textarea>
+      </div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-ghost" id="btnCancel">Cancelar</button>
+        <button type="submit" class="btn btn-primary" id="btnSave">Guardar</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: confirmar eliminación -->
+<div class="overlay confirm-modal" id="confirmOverlay">
+  <div class="modal">
+    <h2>Eliminar registro</h2>
+    <p>¿Eliminar la cabeza con arete <strong id="confirmAreteLabel"></strong>? Esta acción no se puede deshacer.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="btnCancelDelete">Cancelar</button>
+      <button type="button" class="btn btn-danger" id="btnConfirmDelete" style="background:var(--danger); color:#fff; border:none;">Eliminar</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ============================================================
+  // 1) CONFIGURACIÓN DE FIREBASE — REEMPLAZA ESTOS VALORES
+  //    Consíguelos en: Firebase Console → Configuración del proyecto
+  //    → tus apps → SDK setup and configuration → "Config"
+  // ============================================================
+  const firebaseConfig = {
+    apiKey: "TU_API_KEY",
+    authDomain: "TU_PROYECTO.firebaseapp.com",
+    projectId: "TU_PROYECTO",
+    storageBucket: "TU_PROYECTO.appspot.com",
+    messagingSenderId: "000000000000",
+    appId: "1:000000000000:web:xxxxxxxxxxxxxxxxxx"
+  };
+  const COLLECTION_NAME = "ganado";
+  // ============================================================
+
+  const isConfigured = firebaseConfig.apiKey && firebaseConfig.apiKey !== "TU_API_KEY";
+  if(!isConfigured){
+    document.getElementById('configWarning').style.display = 'block';
+  }
+
+  let app, auth, db;
+  if(isConfigured){
+    app = firebase.initializeApp(firebaseConfig);
+    auth = firebase.auth();
+    db = firebase.firestore();
+  }
+
+  let cattle = [];
+  let deleteTargetId = null;
+  let unsubscribeSnapshot = null;
+
+  function esc(str){ const d = document.createElement('div'); d.textContent = str == null ? '' : String(str); return d.innerHTML; }
+  function fmtDate(iso){ if(!iso) return '—'; const d = new Date(iso); if(isNaN(d)) return '—'; return d.toLocaleDateString('es-MX', {day:'2-digit', month:'short', year:'numeric'}); }
+  function showToast(msg, isErr){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.toggle('err', !!isErr);
+    t.classList.add('show');
+    clearTimeout(showToast._tm);
+    showToast._tm = setTimeout(()=> t.classList.remove('show'), 2600);
+  }
+
+  // ---------- Login ----------
+  const loginScreen = document.getElementById('loginScreen');
+  const appRoot = document.getElementById('appRoot');
+  const loginForm = document.getElementById('loginForm');
+  const loginError = document.getElementById('loginError');
+  const btnLogin = document.getElementById('btnLogin');
+
+  loginForm.addEventListener('submit', function(e){
+    e.preventDefault();
+    if(!isConfigured){
+      loginError.textContent = 'Configura primero firebaseConfig en el archivo.';
+      loginError.style.display = 'block';
+      return;
+    }
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+    btnLogin.disabled = true;
+    btnLogin.textContent = 'Entrando…';
+    loginError.style.display = 'none';
+    auth.signInWithEmailAndPassword(email, password)
+      .catch(function(err){
+        console.error(err);
+        let msg = 'No se pudo iniciar sesión. Verifica tu correo y contraseña.';
+        if(err.code === 'auth/user-not-found') msg = 'No existe una cuenta con ese correo. Créala desde Firebase Console.';
+        if(err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential') msg = 'Contraseña incorrecta.';
+        if(err.code === 'auth/invalid-email') msg = 'Correo inválido.';
+        loginError.textContent = msg;
+        loginError.style.display = 'block';
+      })
+      .finally(function(){
+        btnLogin.disabled = false;
+        btnLogin.textContent = 'Entrar';
+      });
+  });
+
+  document.getElementById('btnLogout').addEventListener('click', function(){
+    if(auth) auth.signOut();
+  });
+
+  if(isConfigured){
+    auth.onAuthStateChanged(function(user){
+      if(user){
+        loginScreen.style.display = 'none';
+        appRoot.style.display = 'block';
+        document.getElementById('userEmailLabel').textContent = user.email;
+        startListening();
+      } else {
+        loginScreen.style.display = 'flex';
+        appRoot.style.display = 'none';
+        if(unsubscribeSnapshot){ unsubscribeSnapshot(); unsubscribeSnapshot = null; }
+        cattle = [];
+      }
+    });
+  }
+
+  // ---------- Sincronización en tiempo real con Firestore ----------
+  const syncDot = document.getElementById('syncDot');
+  const syncLabel = document.getElementById('syncLabel');
+
+  function startListening(){
+    syncLabel.textContent = 'Sincronizando…';
+    unsubscribeSnapshot = db.collection(COLLECTION_NAME).onSnapshot(
+      function(snapshot){
+        cattle = snapshot.docs.map(function(doc){
+          const data = doc.data();
+          return {
+            id: doc.id,
+            arete: data.arete || '',
+            ubicacion: data.ubicacion || '',
+            sexo: data.sexo || '',
+            raza: data.raza || '',
+            notas: data.notas || '',
+            fechaRegistro: data.fechaRegistro || ''
+          };
+        });
+        syncDot.classList.remove('offline');
+        syncLabel.textContent = 'Sincronizado';
+        render();
+      },
+      function(err){
+        console.error(err);
+        syncDot.classList.add('offline');
+        syncLabel.textContent = 'Sin conexión';
+        showToast('No se pudo conectar con la base de datos. Revisa tu conexión o las reglas de Firestore.', true);
+      }
+    );
+  }
+
+  // ---------- Render ----------
+  const tbody = document.getElementById('tbody');
+  const cardsView = document.getElementById('cardsView');
+  const tableCard = document.getElementById('tableCard');
+  const emptyState = document.getElementById('emptyState');
+  const noResults = document.getElementById('noResults');
+  const filterSelect = document.getElementById('filterUbicacion');
+  const searchInput = document.getElementById('searchInput');
+
+  function getFiltered(){
+    const q = searchInput.value.trim().toLowerCase();
+    const loc = filterSelect.value;
+    return cattle
+      .filter(c => !loc || c.ubicacion === loc)
+      .filter(c => {
+        if(!q) return true;
+        return (c.arete||'').toLowerCase().includes(q)
+          || (c.raza||'').toLowerCase().includes(q)
+          || (c.notas||'').toLowerCase().includes(q)
+          || (c.ubicacion||'').toLowerCase().includes(q);
+      })
+      .sort((a,b) => (a.arete||'').localeCompare(b.arete||'', 'es', {numeric:true}));
+  }
+
+  function updateUbicacionOptions(){
+    const ubicaciones = [...new Set(cattle.map(c => c.ubicacion).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
+    const currentFilter = filterSelect.value;
+    filterSelect.innerHTML = '<option value="">Todas las ubicaciones</option>' +
+      ubicaciones.map(u => `<option value="${esc(u)}">${esc(u)}</option>`).join('');
+    if(ubicaciones.includes(currentFilter)) filterSelect.value = currentFilter;
+    document.getElementById('ubicacionesList').innerHTML = ubicaciones.map(u => `<option value="${esc(u)}">`).join('');
+  }
+
+  function updateStats(){
+    document.getElementById('statTotal').textContent = cattle.length;
+    document.getElementById('statLugares').textContent = new Set(cattle.map(c=>c.ubicacion).filter(Boolean)).size;
+    const weekAgo = Date.now() - 7*24*60*60*1000;
+    const nuevas = cattle.filter(c => c.fechaRegistro && new Date(c.fechaRegistro).getTime() >= weekAgo).length;
+    document.getElementById('statHoy').textContent = nuevas;
+  }
+
+  function sexoLabel(s){ return s === 'H' ? 'Hembra' : (s === 'M' ? 'Macho' : '—'); }
+
+  function render(){
+    updateUbicacionOptions();
+    updateStats();
+
+    if(cattle.length === 0){
+      emptyState.style.display = 'block';
+      noResults.style.display = 'none';
+      tableCard.style.display = 'none';
+      cardsView.style.display = 'none';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    const list = getFiltered();
+    if(list.length === 0){
+      noResults.style.display = 'block';
+      tableCard.style.display = 'none';
+      cardsView.style.display = 'none';
+      return;
+    }
+    noResults.style.display = 'none';
+    tableCard.style.display = 'block';
+    cardsView.style.display = 'flex';
+
+    tbody.innerHTML = list.map(c => `
+      <tr>
+        <td><span class="ear-tag">${esc(c.arete)}</span></td>
+        <td><span class="loc-badge">📍 ${esc(c.ubicacion)}</span></td>
+        <td>${c.sexo ? `<span class="sexo-pill sexo-${c.sexo}">${sexoLabel(c.sexo)}</span>` : '<span class="muted">—</span>'}</td>
+        <td>${c.raza ? esc(c.raza) : '<span class="muted">—</span>'}</td>
+        <td class="muted">${fmtDate(c.fechaRegistro)}</td>
+        <td class="muted" style="max-width:220px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${c.notas ? esc(c.notas) : '—'}</td>
+        <td>
+          <div class="row-actions">
+            <button class="btn btn-ghost btn-sm" data-edit="${c.id}">Editar</button>
+            <button class="btn btn-danger btn-sm" data-del="${c.id}">Eliminar</button>
+          </div>
+        </td>
+      </tr>
+    `).join('');
+
+    cardsView.innerHTML = list.map(c => `
+      <div class="cattle-card">
+        <div class="top-row">
+          <span class="ear-tag">${esc(c.arete)}</span>
+          ${c.sexo ? `<span class="sexo-pill sexo-${c.sexo}">${sexoLabel(c.sexo)}</span>` : ''}
+        </div>
+        <div class="meta">📍 <span class="loc-badge">${esc(c.ubicacion)}</span></div>
+        ${c.raza ? `<div class="meta">Raza: ${esc(c.raza)}</div>` : ''}
+        <div class="meta">Registrado: ${fmtDate(c.fechaRegistro)}</div>
+        ${c.notas ? `<div class="meta">Notas: ${esc(c.notas)}</div>` : ''}
+        <div class="actions">
+          <button class="btn btn-ghost btn-sm" data-edit="${c.id}" style="flex:1;">Editar</button>
+          <button class="btn btn-danger btn-sm" data-del="${c.id}" style="flex:1;">Eliminar</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  // ---------- Modal formulario ----------
+  const formOverlay = document.getElementById('formOverlay');
+  const cattleForm = document.getElementById('cattleForm');
+  const modalTitle = document.getElementById('modalTitle');
+  const modalSub = document.getElementById('modalSub');
+  const editIdInput = document.getElementById('editId');
+  const areteInput = document.getElementById('arete');
+  const ubicacionInput = document.getElementById('ubicacion');
+  const sexoInput = document.getElementById('sexo');
+  const razaInput = document.getElementById('raza');
+  const notasInput = document.getElementById('notas');
+
+  function openForm(editing){
+    document.querySelectorAll('.field').forEach(f => f.classList.remove('has-error'));
+    if(editing){
+      modalTitle.textContent = 'Editar registro';
+      modalSub.textContent = 'Actualiza la ubicación u otros datos de esta cabeza.';
+      editIdInput.value = editing.id;
+      areteInput.value = editing.arete;
+      ubicacionInput.value = editing.ubicacion;
+      sexoInput.value = editing.sexo || '';
+      razaInput.value = editing.raza || '';
+      notasInput.value = editing.notas || '';
+    } else {
+      modalTitle.textContent = 'Registrar cabeza';
+      modalSub.textContent = 'Captura el número de arete y su ubicación actual.';
+      cattleForm.reset();
+      editIdInput.value = '';
+    }
+    formOverlay.classList.add('open');
+    setTimeout(()=> areteInput.focus(), 50);
+  }
+  function closeForm(){ formOverlay.classList.remove('open'); }
+
+  document.getElementById('btnAdd').addEventListener('click', ()=> openForm(null));
+  document.getElementById('btnAddEmpty').addEventListener('click', ()=> openForm(null));
+  document.getElementById('btnCancel').addEventListener('click', closeForm);
+  formOverlay.addEventListener('click', (e)=> { if(e.target === formOverlay) closeForm(); });
+
+  cattleForm.addEventListener('submit', async function(e){
+    e.preventDefault();
+    const id = editIdInput.value;
+    const arete = areteInput.value.trim();
+    const ubicacion = ubicacionInput.value.trim();
+
+    let valid = true;
+    document.getElementById('fieldArete').classList.toggle('has-error', !arete);
+    document.getElementById('fieldUbicacion').classList.toggle('has-error', !ubicacion);
+    if(!arete || !ubicacion) valid = false;
+
+    if(valid){
+      const dup = cattle.find(c => c.arete.toLowerCase() === arete.toLowerCase() && c.id !== id);
+      if(dup){
+        document.getElementById('fieldArete').classList.add('has-error');
+        document.querySelector('#fieldArete .error-msg').textContent = 'Ya existe un registro con este número de arete.';
+        valid = false;
+      } else {
+        document.querySelector('#fieldArete .error-msg').textContent = 'Escribe un número de arete.';
+      }
+    }
+    if(!valid) return;
+
+    const data = {
+      arete, ubicacion,
+      sexo: sexoInput.value,
+      raza: razaInput.value.trim(),
+      notas: notasInput.value.trim()
+    };
+
+    const btnSave = document.getElementById('btnSave');
+    btnSave.disabled = true;
+    try{
+      if(id){
+        await db.collection(COLLECTION_NAME).doc(id).update(data);
+        showToast('Registro actualizado.');
+      } else {
+        await db.collection(COLLECTION_NAME).add({ ...data, fechaRegistro: new Date().toISOString() });
+        showToast('Cabeza registrada.');
+      }
+      closeForm();
+    }catch(err){
+      console.error(err);
+      showToast('No se pudo guardar en la base de datos. Revisa tu conexión.', true);
+    }finally{
+      btnSave.disabled = false;
+    }
+  });
+
+  // ---------- Eliminar ----------
+  const confirmOverlay = document.getElementById('confirmOverlay');
+  document.getElementById('btnCancelDelete').addEventListener('click', ()=> {
+    confirmOverlay.classList.remove('open');
+    deleteTargetId = null;
+  });
+  confirmOverlay.addEventListener('click', (e)=> { if(e.target === confirmOverlay){ confirmOverlay.classList.remove('open'); deleteTargetId = null; } });
+
+  document.getElementById('btnConfirmDelete').addEventListener('click', async ()=>{
+    if(!deleteTargetId) return;
+    try{
+      await db.collection(COLLECTION_NAME).doc(deleteTargetId).delete();
+      showToast('Registro eliminado.');
+    }catch(err){
+      console.error(err);
+      showToast('No se pudo eliminar. Revisa tu conexión.', true);
+    }
+    confirmOverlay.classList.remove('open');
+    deleteTargetId = null;
+  });
+
+  function requestDelete(id){
+    const c = cattle.find(c => c.id === id);
+    if(!c) return;
+    deleteTargetId = id;
+    document.getElementById('confirmAreteLabel').textContent = c.arete;
+    confirmOverlay.classList.add('open');
+  }
+
+  document.addEventListener('click', function(e){
+    const editBtn = e.target.closest('[data-edit]');
+    const delBtn = e.target.closest('[data-del]');
+    if(editBtn){ const c = cattle.find(c => c.id === editBtn.dataset.edit); if(c) openForm(c); }
+    if(delBtn){ requestDelete(delBtn.dataset.del); }
+  });
+
+  // ---------- Búsqueda / filtro ----------
+  searchInput.addEventListener('input', render);
+  filterSelect.addEventListener('change', render);
+
+  // ---------- Exportar / Importar ----------
+  document.getElementById('btnExport').addEventListener('click', function(){
+    const blob = new Blob([JSON.stringify(cattle, null, 2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,10);
+    a.href = url; a.download = `inventario_ganado_${stamp}.json`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('Respaldo exportado.');
+  });
+
+  document.getElementById('btnExportCsv').addEventListener('click', function(){
+    const headers = ['arete','ubicacion','sexo','raza','fechaRegistro','notas'];
+    const rows = cattle.map(c => headers.map(h => {
+      let v = c[h] == null ? '' : String(c[h]);
+      if(v.includes(',') || v.includes('"') || v.includes('\n')) v = '"' + v.replace(/"/g,'""') + '"';
+      return v;
+    }).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob(["\uFEFF" + csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    const stamp = new Date().toISOString().slice(0,10);
+    a.href = url; a.download = `inventario_ganado_${stamp}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    showToast('CSV exportado.');
+  });
+
+  document.getElementById('btnImportTrigger').addEventListener('click', function(){
+    document.getElementById('fileImport').click();
+  });
+  document.getElementById('fileImport').addEventListener('change', function(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = async function(evt){
+      try{
+        const data = JSON.parse(evt.target.result);
+        if(!Array.isArray(data)) throw new Error('Formato inválido');
+        const valid = data.every(c => c && typeof c === 'object' && c.arete && c.ubicacion);
+        if(!valid) throw new Error('El archivo no tiene el formato esperado');
+
+        const merge = confirm(`Se encontraron ${data.length} registros en el archivo.\n\nAceptar = combinar con el inventario actual (evitando duplicar aretes).\nCancelar = cancelar la importación.`);
+        if(!merge){ e.target.value = ''; return; }
+
+        const batch = db.batch();
+        let count = 0;
+        data.forEach(nc => {
+          const existing = cattle.find(c => c.arete.toLowerCase() === String(nc.arete).toLowerCase());
+          const payload = {
+            arete: String(nc.arete),
+            ubicacion: String(nc.ubicacion),
+            sexo: nc.sexo || '',
+            raza: nc.raza || '',
+            notas: nc.notas || '',
+            fechaRegistro: nc.fechaRegistro || new Date().toISOString()
+          };
+          const ref = existing ? db.collection(COLLECTION_NAME).doc(existing.id) : db.collection(COLLECTION_NAME).doc();
+          batch.set(ref, payload, { merge: true });
+          count++;
+        });
+        await batch.commit();
+        showToast(`Respaldo importado (${count} registros).`);
+      }catch(err){
+        console.error(err);
+        showToast('No se pudo leer o guardar el archivo importado.', true);
+      }
+      e.target.value = '';
+    };
+    reader.readAsText(file);
+  });
+
+})();
+</script>
+</body>
+</html>
